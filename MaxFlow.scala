@@ -52,4 +52,4 @@ val sssp = initialGraph.pregel(Double.PositiveInfinity)(
   },
   (a,b) => math.min(a,b) // Merge Message
 )
-println(sssp.vertices.collect.mkString("\n"))
+println(sssp.vertices.filter(x => x._1 == targetId).collect.mkString("\n"))
