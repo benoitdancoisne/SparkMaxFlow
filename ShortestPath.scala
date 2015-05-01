@@ -30,14 +30,14 @@ inDegrees.foreach(d => println(d))
 // Shortest Path
 val sourceId: VertexId = 1 // The source
 val targetId: VertexId = 4 // The target
-
+val test: VertexId = 5 // default vertex id, probably need to change
 // Initialize the graph such that all vertices except the root have distance infinity.
 // Note that now vertices will be of type [VertexId, (distance,id)]
-val initialGraph = graph.mapVertices( (id, _) => if (id == sourceId) Array(0.0, id) else Array(Double.PositiveInfinity, id))
+val initialGraph = graph.mapVertices( (id, _) => if (id == sourceId) (0.0, id) else (Double.PositiveInfinity, id))
 
-val sssp = initialGraph.pregel(Array(Double.PositiveInfinity, -1))(
+val sssp = initialGraph.pregel((Double.PositiveInfinity, test))(
   (id, dist, newDist) => {
-    if (dist(0) < newDist(0)) dist // dist(0) = first entry of (distance,id)
+    if (dist._1 < newDist._1) dist // dist(0) = first entry of (distance,id)
     else newDist
   },
   triplet => { // srcAttr, attribute of where message comes from
@@ -45,8 +45,8 @@ val sssp = initialGraph.pregel(Array(Double.PositiveInfinity, -1))(
     // attr of edge
     // So if distance of source + weight of edge connecting to destination is
     // less than attribute of destination => update
-    if (triplet.srcAttr(0) + triplet.attr < triplet.dstAttr(0)) {
-      Iterator((triplet.dstId, Array(triplet.srcAttr(0) + triplet.attr, triplet.srcId)))
+    if (triplet.srcAttr._1 + triplet.attr < triplet.dstAttr._1) {
+      Iterator((triplet.dstId, (triplet.srcAttr._1 + triplet.attr, triplet.srcId)))
       // Now you change the new vertex to be [id of destination, (distance, sourceId)
     }
     else {
@@ -54,12 +54,12 @@ val sssp = initialGraph.pregel(Array(Double.PositiveInfinity, -1))(
     }
   },
   (a, b) => {
-    if (a(0) < b(0)) a
+    if (a._1 < b._1) a
     else b
   }
 )
 
-println(sssp.vertices)
+sssp.vertices.collect()
 
 /*
 val ans: RDD[Int] = sssp.vertices.map(vertex =>
