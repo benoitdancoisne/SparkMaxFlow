@@ -1,6 +1,9 @@
 import org.apache.spark._
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
+import scala.collection.mutable.HashMap // Need this for HashMap
+import scala.collection.mutable.ListBuffer
+import scala.util.control._ // Need this to be able to do break
 
 // TEST SHORTEST PATH
 
@@ -9,25 +12,22 @@ val vertices = sc.textFile("data/toy-vertices.txt").
   flatMap(line => line.split(" ")).
   map(l => (l.toLong,"vertex")) // Vertex needs a property and needs to be type long
 
+/*
 println("Vertices:")
-vertices.foreach(v => println(v))
+vertices.foreach(v => println(v)) */
 
 // Import Edges
 val edges = sc.textFile("data/toy-edges.txt").
   map(line => line.split(" ")).
   map(e => Edge(e(0).toLong, e(1).toLong, e(2).toLong))
 
+/*
 println("Edges:")
-edges.foreach(e => println(e))
+edges.foreach(e => println(e)) */
 
 // Create Graph
 val graph = Graph(vertices, edges)
 
-// Calculate inDegrees for fun
-val inDegrees = graph.inDegrees
-inDegrees.foreach(d => println(d))
-
-/*
 // Shortest Path
 val sourceId: VertexId = 1 // The source
 val targetId: VertexId = 4 // The target
@@ -60,8 +60,41 @@ val sssp = initialGraph.pregel((Double.PositiveInfinity, test))(
     else b
   }
 )
+
+
+// What happens here if nodes are unvisited? We do not want those in our set. Add if != INF statement?
+val vNum = sssp.vertices.count.toInt // Number of elements < n
+val v = sssp.vertices.take(vNum) // Convert RDD to array
+
+val links = new HashMap[VertexId, VertexId]
+for ( i <- 0 to vNum-1 ) {
+  links += v(i)._1 -> v(i)._2._2
+}
+
+/* This would be more elegant but does not work
+sssp.vertices.foreach( v => links += v._1 -> v._2._2 )
 */
 
+println(links)
+
+// Determine the path
+val path = ListBuffer[VertexId](targetId) // Use ListBuffer instead of List as it is mutable
+val loop = new Breaks // Needed to do break
+for ( i <- 0 to vNum-1 ) {
+  val id = path.head // First element of ListBuffer
+  if (id == sourceId) {
+    loop.break
+  }
+  path.prepend(links(id))
+}
+
+println("Shortest Path is: ")
+println(path)
+
+
+
+
+/*
 // Naive Implementation
 // Use ListBuffer as appending to List is O(n) (ListBuffer is mutable, List isn't)
 
@@ -99,10 +132,4 @@ val sssp = initialGraph.pregel((Double.PositiveInfinity, test))(
 
 println("Shortest path is: ")
 sssp.vertices.filter(x => x._1 == targetId).map(x => x._2._2).collect()
-
-/*
-val ans: RDD[Int] = sssp.vertices.map(vertex =>
-  "Vertex " + vertex._1 + ": distance is " + vertex._2(0) + ", previous node is Vertex " + vertex._2(1).toInt)
-
-
-ans.take(10).mkString("\n") */
+*/
