@@ -12,18 +12,10 @@ val vertices = sc.textFile("data/toy-vertices.txt").
   flatMap(line => line.split(" ")).
   map(l => (l.toLong,"vertex")) // Vertex needs a property and needs to be type long
 
-/*
-println("Vertices:")
-vertices.foreach(v => println(v)) */
-
 // Import Edges
 val edges = sc.textFile("data/toy-edges.txt").
   map(line => line.split(" ")).
-  map(e => Edge(e(0).toLong, e(1).toLong, e(2).toLong))
-
-/*
-println("Edges:")
-edges.foreach(e => println(e)) */
+  map(e => Edge(e(0).toLong, e(1).toLong, e(2).toDouble))
 
 // Create Graph
 val graph = Graph(vertices, edges)
@@ -53,7 +45,8 @@ val sssp = initialGraph.pregel((Double.PositiveInfinity, Double.PositiveInfinity
   triplet => {
     // So if distance of source + weight of edge connecting to destination is
     // less than attribute of destination => update
-    if (triplet.srcAttr._1 + 1 < triplet.dstAttr._1) {
+	// if capacity along edges == 0; do not propagate message
+    if (triplet.srcAttr._1 + 1 < triplet.dstAttr._1 && triplet.attr > 0) {
       Iterator((triplet.dstId, (triplet.srcAttr._1 + 1, math.min(triplet.srcAttr._2,triplet.attr),triplet.srcId)))
     }
     else {
@@ -71,7 +64,11 @@ val sssp = initialGraph.pregel((Double.PositiveInfinity, Double.PositiveInfinity
 
 sssp.vertices.collect()
 
-// TODO : recover shortest path + min capaacity
+/* TODO : recover shortest path + min capacity
+		  stop pregel sp when target node is hit --> pregel API does not seem to offer the possibility
+		  maybe add an extra case in the sendMsg and send an empty iterator if target node is hit?
+		  (edge, flow) RDD? inner join the paths after each iteration
+*/
 // What happens here if nodes are unvisited? We do not want those in our set. Add if != INF statement?
 val vNum = sssp.vertices.count.toInt // Number of elements < n
 val v = sssp.vertices.take(vNum) // Convert RDD to array
@@ -88,19 +85,6 @@ sssp.vertices.foreach( v => links += v._1 -> v._2._2 )
 
 println(links)
 
-/*
-// Determine the path
-// Create a list of edges first and then convert to RDD
-val path = ListBuffer[VertexId](targetId) // Use ListBuffer instead of List as it is mutable
-val loop = new Breaks // Needed to do break
-for ( i <- 0 to vNum-1 ) {
-  val id = path.head // First element of ListBuffer
-  if (id == sourceId) {
-    loop.break
-  }
-  path.prepend(links(id))
-} */
-
 // Store path as edges
 val path = ListBuffer[Edge[Double]](Edge(links(targetId),targetId,minCap))
 val loop = new Breaks // Needed to do break
@@ -113,45 +97,14 @@ for ( i <- 0 to vNum-1 ) {
 }
 
 val edgePath = sc.parallelize(path)
+// need to transform to an array of edges (no need for it to be parallelized since path size < #vertices
+// the following lines are inefficient because why do we need to create a new graph just to get the right
+// data types...
+val graph2 = Graph(vertices, edgePath)
+val edge2 = graph2.edges
+// this line below doesn't work because they need to have the same partition strategy
+// graph.edges.innerJoin(edge2)( (v1, v2, a1, a2) => a1 - a2 )
 
 println("Shortest Path is: ")
 println(path)
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-/* OLD SHORTEST PATH
-// Shortest Path
-val sourceId: VertexId = 1 // The source
-val targetId: VertexId = 4 // The target
-val test: VertexId = 5 // default vertex id, probably need to change
-// Initialize the graph such that all vertices except the root have distance infinity.
-// Note that now vertices will be of type [VertexId, (distance,id)]
-val initialGraph = graph.mapVertices( (id, _) => if (id == sourceId) (0.0, id) else (Double.PositiveInfinity, id))
-
-
-val sssp = initialGraph.pregel((Double.PositiveInfinity, test))(
-  (id, dist, newDist) => {
-    if (dist._1 < newDist._1) dist // dist(0) = first entry of (distance,id)
-    else newDist
-  },
-  triplet => { // srcAttr, attribute of where message comes from
-    // dstAttr, attribute of destination
-    // attr of edge
-    // So if distance of source + weight of edge connecting to destination is
-    // less than attribute of destination => update
-    if (triplet.srcAttr._1 + triplet.attr < triplet.dstAttr._1) {
-      Iterator((triplet.dstId, (triplet.srcAttr._1 + triplet.attr, triplet.srcId)))
-      // Now you change the new vertex to be [id of destination, (distance, sourceId)
-    }
-    else {
-      Iterator.empty
-    }
-  },
-  (a, b) => {
-    if (a._1 < b._1) a
-    else b
-  }
-)
-*/
-
-
 
