@@ -71,14 +71,15 @@ val sssp = initialGraph.pregel((Double.PositiveInfinity, Double.PositiveInfinity
 
 sssp.vertices.collect()
 
-/* TODO : recover shortest path + min capaacity
+// TODO : recover shortest path + min capaacity
 // What happens here if nodes are unvisited? We do not want those in our set. Add if != INF statement?
 val vNum = sssp.vertices.count.toInt // Number of elements < n
 val v = sssp.vertices.take(vNum) // Convert RDD to array
+val minCap = sssp.vertices.filter(v => v._1 == targetId).first._2._2
 
 val links = new HashMap[VertexId, VertexId]
 for ( i <- 0 to vNum-1 ) {
-  links += v(i)._1 -> v(i)._2._2
+  links += v(i)._1 -> v(i)._2._3
 }
 
 /* This would be more elegant but does not work
@@ -87,7 +88,9 @@ sssp.vertices.foreach( v => links += v._1 -> v._2._2 )
 
 println(links)
 
+/*
 // Determine the path
+// Create a list of edges first and then convert to RDD
 val path = ListBuffer[VertexId](targetId) // Use ListBuffer instead of List as it is mutable
 val loop = new Breaks // Needed to do break
 for ( i <- 0 to vNum-1 ) {
@@ -96,12 +99,23 @@ for ( i <- 0 to vNum-1 ) {
     loop.break
   }
   path.prepend(links(id))
+} */
+
+// Store path as edges
+val path = ListBuffer[Edge[Double]](Edge(links(targetId),targetId,minCap))
+val loop = new Breaks // Needed to do break
+for ( i <- 0 to vNum-1 ) {
+  val id = path.head.srcId // First element of ListBuffer
+  if (id == sourceId) {
+    loop.break
+  }
+  path.prepend(Edge(links(id),id,minCap))
 }
+
+val edgePath = sc.parallelize(path)
 
 println("Shortest Path is: ")
 println(path)
-*/
-
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 /* OLD SHORTEST PATH
