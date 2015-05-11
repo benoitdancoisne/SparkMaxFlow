@@ -2,7 +2,8 @@ import org.apache.spark._
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
 import scala.collection.mutable.HashMap // Need this for HashMap
-import scala.collection.mutable.ListBuffer
+//import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.Set
 import scala.util.control._ // Need this to be able to do break
 
 // Import vertices
@@ -10,33 +11,19 @@ val vertices = sc.textFile("data/toy-vertices.txt").
                 flatMap(line => line.split(" ")).
                 map(l => (l.toLong,"vertex")) // Vertex needs a property and needs to be type long
 
-/*
-println("Vertices:")
-vertices.foreach(v => println(v))
-*/
 // Import Edges
 val edges = sc.textFile("data/toy-edges.txt").
                 map(line => line.split(" ")).
                 map(e => Edge(e(0).toLong, e(1).toLong, e(2).toLong))
 
 // Build RDD of flows
-val flows = edges.map(e => Edge(e.srcId,e.dstId,0.0))
-//val flows = edges.map(e => (e,0.0))
-
-/*
-// Print to check
-println("Edges:")
-edges.foreach(e => println(e))
-
-println("Flows:")
-flows.foreach(e => println(e))
-*/
+val flows = edges.map(e => ( (e.srcId,e.dstId), 0.0) )
 
 // Create Graph (and residual graph)
 val graph = Graph(vertices, edges)
 val residual = Graph(vertices, edges)
 
-// Shortest Path, WE NEED TO MAKE THIS INTO A METHOD
+// Shortest Path, TODO MAKE THIS INTO A METHOD
 val sourceId: VertexId = 1 // The source
 val targetId: VertexId = 4 // The target
 val test: VertexId = 5 // default vertex id, probably need to change
@@ -78,11 +65,12 @@ val sssp = initialGraph.pregel((Double.PositiveInfinity, Double.PositiveInfinity
   }
 )
 
-/* TODO : recover shortest path + min capacity
+/* TODO : 
+
 		  stop pregel sp when target node is hit --> pregel API does not seem to offer the possibility
 		  maybe add an extra case in the sendMsg and send an empty iterator if target node is hit?
-		  (edge, flow) RDD? inner join the paths after each iteration
 */
+
 // What happens here if nodes are unvisited? We do not want those in our set. Add if != INF statement?
 val vNum = sssp.vertices.count.toInt // Number of elements < n
 val v = sssp.vertices.take(vNum) // Convert RDD to array
@@ -93,32 +81,35 @@ for ( i <- 0 to vNum-1 ) {
   links += v(i)._1 -> v(i)._2._3
 }
 
+// Build the set of edges in the shortest path
 
-// Store path as edges
-val path = ListBuffer[Edge[Double]](Edge(links(targetId),targetId,minCap))
+val path = Set[(VertexId, VertexId)]() 
+var id = targetId
 val loop = new Breaks // Needed to do break
 for ( i <- 0 to vNum-1 ) {
-  val id = path.head.srcId // First element of ListBuffer
   if (id == sourceId) {
     loop.break
   }
-  path.prepend(Edge(links(id),id,minCap))
+  path += ((links(id),id))
+	id = links(id)
 }
 
-val edgePath = sc.broadcast(path)
+val bcPath = sc.broadcast(path)
 
-// Replicated join spark
+// Update the flows RDD
+// TODO: update flows and not otherflows
 
-// need to transform to an array of edges (no need for it to be parallelized since path size < #vertices
-// the following lines are inefficient because why do we need to create a new graph just to get the right
-// data types...
-// val graph2 = Graph(vertices, edgePath)
-// val edge2 = graph2.edges
-val newFlow = flows.join(edgePath)
-// this line below doesn't work because they need to have the same partition strategy
-// graph.edges.innerJoin(edge2)( (v1, v2, a1, a2) => a1 - a2 )
-
-
+val otherflows = flows.map(e => 
+{ 
+	if (bcPath.value contains e._1)
+	{
+		(e._1, e._2 + minCap)
+	}
+	else
+	{
+		e
+	}													 
+})
 
 println("Shortest Path is: ")
 println(path)
