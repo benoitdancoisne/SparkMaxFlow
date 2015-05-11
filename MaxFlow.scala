@@ -105,7 +105,9 @@ for ( i <- 0 to vNum-1 ) {
   path.prepend(Edge(links(id),id,minCap))
 }
 
-val edgePath = sc.parallelize(path)
+val edgePath = sc.broadcast(path)
+
+// Replicated join spark
 
 // need to transform to an array of edges (no need for it to be parallelized since path size < #vertices
 // the following lines are inefficient because why do we need to create a new graph just to get the right
