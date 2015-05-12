@@ -9,7 +9,7 @@ import scala.util.control._ // Need this to be able to do break
 // Import vertices
 val vertices = sc.textFile("data/toy-vertices.txt").
                 flatMap(line => line.split(" ")).
-                map(l => (l.toLong,"vertex")) // Vertex needs a property and needs to be type long
+                map(l => (l.toLong, None)) // Vertex needs a property
 
 // Import Edges
 val edges = sc.textFile("data/toy-edges.txt").
@@ -98,7 +98,7 @@ val bcPath = sc.broadcast(path)
 // Update the flows RDD
 // TODO: update flows and not otherflows
 
-val otherflows = flows.flatmap(e => 
+val otherflows = flows.map(e => 
 { 
 	if (bcPath.value contains e._1)
 	{
@@ -109,11 +109,20 @@ val otherflows = flows.flatmap(e =>
 		e
 	}													 
 })
-/*
-// Update the residual graph
-val newEdges = residual.edges.map(
 
-)
-*/
+// Update the residual graph
+
+val newEdges = residual.edges.map(e => ( (e.srcId,e.dstId), e.attr) ).
+				flatMap(e => {
+					if (bcPath.value contains e._1)
+					{
+						Seq((e._1, e._2 - minCap),((e._1._2, e._1._1), minCap))
+					}
+					else Seq(e)
+					}
+				)
+				
+// note: reduceByKey doesn't work
+
 println("Shortest Path is: ")
 println(path)
