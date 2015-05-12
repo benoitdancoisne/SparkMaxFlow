@@ -14,10 +14,10 @@ val vertices = sc.textFile("data/toy-vertices.txt").
 // Import Edges
 val edges = sc.textFile("data/toy-edges.txt").
                 map(line => line.split(" ")).
-                map(e => Edge(e(0).toLong, e(1).toLong, e(2).toDouble))
+                map(e => Edge(e(0).toLong, e(1).toLong, e(2).toInt))
 
 // Build RDD of flows
-val flows = edges.map(e => ( (e.srcId,e.dstId), 0.0) )
+val flows = edges.map(e => ( (e.srcId,e.dstId), 0) )
 
 // Create Graph (and residual graph)
 val residual = Graph(vertices, edges)
@@ -29,13 +29,15 @@ val test: VertexId = 5 // default vertex id, probably need to change
 
 // Initialize the graph such that all vertices except the root have distance infinity.
 // Note that now vertices will be of type [VertexId, (distance,mincap,id)]
-// Shouldn't distance and mincap be integer? We only allow integer capacities? No need for double
+// Note that the equivalent of Double.PositiveInfinity  is Int.MaxValue. But we check
+// srcAttr._1 + 1, so we need to make sure there is no overflow, so set it to Int.MaxValue - 1
+// Otherwise Double.PositiveInfinity.toInt?
 
-val initialGraph = residual.mapVertices( (id, _) => if (id == sourceId) (0.0, Double.PositiveInfinity, id)
-else (Double.PositiveInfinity, Double.PositiveInfinity, id))
+val initialGraph = residual.mapVertices( (id, _) => if (id == sourceId) (0, Int.MaxValue - 1, id)
+else (Int.MaxValue - 1, Int.MaxValue - 1, id))
 
 
-val sssp = initialGraph.pregel((Double.PositiveInfinity, Double.PositiveInfinity, test))(
+val sssp = initialGraph.pregel((Int.MaxValue - 1, Int.MaxValue - 1, test))(
 
   // Vprog
   (id, dist, newDist) => {
