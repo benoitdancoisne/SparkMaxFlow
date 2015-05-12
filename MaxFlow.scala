@@ -20,7 +20,6 @@ val edges = sc.textFile("data/toy-edges.txt").
 val flows = edges.map(e => ( (e.srcId,e.dstId), 0.0) )
 
 // Create Graph (and residual graph)
-val graph = Graph(vertices, edges)
 val residual = Graph(vertices, edges)
 
 // Shortest Path, TODO MAKE THIS INTO A METHOD
@@ -32,7 +31,7 @@ val test: VertexId = 5 // default vertex id, probably need to change
 // Note that now vertices will be of type [VertexId, (distance,mincap,id)]
 // Shouldn't distance and mincap be integer? We only allow integer capacities? No need for double
 
-val initialGraph = graph.mapVertices( (id, _) => if (id == sourceId) (0.0, Double.PositiveInfinity, id)
+val initialGraph = residual.mapVertices( (id, _) => if (id == sourceId) (0.0, Double.PositiveInfinity, id)
 else (Double.PositiveInfinity, Double.PositiveInfinity, id))
 
 
@@ -99,7 +98,7 @@ val bcPath = sc.broadcast(path)
 // Update the flows RDD
 // TODO: update flows and not otherflows
 
-val otherflows = flows.map(e => 
+val otherflows = flows.flatmap(e => 
 { 
 	if (bcPath.value contains e._1)
 	{
@@ -110,6 +109,11 @@ val otherflows = flows.map(e =>
 		e
 	}													 
 })
+/*
+// Update the residual graph
+val newEdges = residual.edges.map(
 
+)
+*/
 println("Shortest Path is: ")
 println(path)
