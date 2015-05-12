@@ -14,7 +14,7 @@ val vertices = sc.textFile("data/toy-vertices.txt").
 // Import Edges
 val edges = sc.textFile("data/toy-edges.txt").
                 map(line => line.split(" ")).
-                map(e => Edge(e(0).toLong, e(1).toLong, e(2).toLong))
+                map(e => Edge(e(0).toLong, e(1).toLong, e(2).toDouble))
 
 // Build RDD of flows
 val flows = edges.map(e => ( (e.srcId,e.dstId), 0.0) )
@@ -120,9 +120,7 @@ val newEdges = residual.edges.map(e => ( (e.srcId,e.dstId), e.attr) ).
 					}
 					else Seq(e)
 					}
-				)
-				
-// note: reduceByKey doesn't work
+				).reduceByKey(_ + _)
 
 println("Shortest Path is: ")
 println(path)
