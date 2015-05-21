@@ -6,6 +6,8 @@ import scala.collection.mutable.HashMap // Need this for HashMap
 import scala.collection.mutable.Set
 import scala.util.control._ // Need this to be able to do break
 
+/////////// CREATE GRAPH ////////////
+
 // Import vertices
 val vertices = sc.textFile("data/toy-vertices.txt").
                 flatMap(line => line.split(" ")).
@@ -25,15 +27,7 @@ var residual: Graph[None.type,Int] = Graph(vertices, edges)
 
 
 
-// FOR LOOP, WE WANT TO CLEAN THIS SHIZ UP BAD
-// Which upper bound should we put? How many iterations in for loop?
-// Note that break in scala breaks out of ALL for loops, not just one
-
-// Shortest Path, TODO MAKE THIS INTO A METHOD
-
-
-val sourceId: VertexId = 1 // The source
-val targetId: VertexId = 4 // The target
+//////// SHORTEST PATH FUNCTION /////////////////
 
 def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.type,Int] ) : (Set[(VertexId, VertexId)], Int) = {
   val test: VertexId = 5 // default vertex id, probably need to change
@@ -100,11 +94,7 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
     // Build the set of edges in the shortest path
     var id = targetId
     val loop = new Breaks // Needed to do break
-    // Might not need this, can just add it in for loop
     for (i <- 0 to vNum - 1; if id != sourceId) {
-      //if (id == sourceId) {
-      //  loop.break
-      //}
       path += ((links(id), id))
       id = links(id)
     }
@@ -113,39 +103,55 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
   return (path, minCap)
 }
 
-val shortest = shortestPath(sourceId, targetId, residual)
-val path = shortest._1
-val minCap = shortest._2
+/////////////// COMPUTE MAX FLOW //////////////////////
 
-val bcPath = sc.broadcast(path)
+// TODO :
+// How many iterations?
+val iterMax = 10;
 
-// Update the flows RDD
-// TODO: update flows and not otherflows
+// Set s and t nodes
+val sourceId: VertexId = 1 // The source
+val targetId: VertexId = 4 // The target
 
-var newFlows = flows.map(e => {
-  if (bcPath.value contains e._1) {
-    (e._1, e._2 + minCap)
+// Need to define theses outside loop to avoid use of break
+var shortest = shortestPath(sourceId, targetId, residual)
+var path = shortest._1
+var minCap = shortest._2
+val empty = Set[(VertexId, VertexId)]() // Empty set
+
+for (i <- 0 to iterMax; if path != empty) {
+  val bcPath = sc.broadcast(path)
+
+  // Update the flows
+  val updateFlow = minCap // This is of course stupid, but using minCap to update newFlows makes values go crazy
+  val newFlows = flows.map(e => {
+    if (bcPath.value contains e._1) {
+      (e._1, e._2 + updateFlow)
+    }
+    else {
+      e
+    }
+  })
+
+  flows = newFlows
+
+  // Update the residual graph
+  val newEdges = residual.edges.map(e => ((e.srcId, e.dstId), e.attr)).
+    flatMap(e => {
+    if (bcPath.value contains e._1) {
+      Seq((e._1, e._2 - minCap), ((e._1._2, e._1._1), minCap))
+    }
+    else Seq(e)
   }
-  else {
-    e
-  }
-})
+    ).reduceByKey(_ + _)
 
-flows = newFlows
+  residual = Graph(vertices, newEdges.map(e => Edge(e._1._1, e._1._2, e._2)))
 
-// Update the residual graph
+  // Compute these for next iteration of the for loop
+  shortest = shortestPath(sourceId, targetId, residual)
+  path = shortest._1
+  minCap = shortest._2
+}
 
-val newEdges = residual.edges.map(e => ((e.srcId, e.dstId), e.attr)).
-                              flatMap(e =>
-                              {
-                                if (bcPath.value contains e._1) {
-                                  Seq((e._1, e._2 - minCap), ((e._1._2, e._1._1), minCap))
-                                }
-                                else Seq(e)
-                              }
-                              ).reduceByKey(_ + _)
-
-residual = Graph(vertices, newEdges.map(e => Edge(e._1._1, e._1._2, e._2) ) )
-
-println("Shortest Path is: ")
-println(path)
+println("Max Flow: ")
+flows.collect
