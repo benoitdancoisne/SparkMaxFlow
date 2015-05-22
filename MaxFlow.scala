@@ -1,10 +1,8 @@
 import org.apache.spark._
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
-import scala.collection.mutable.HashMap // Need this for HashMap
-//import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.HashMap
 import scala.collection.mutable.Set
-import scala.util.control._ // Need this to be able to do break
 
 /////////// CREATE GRAPH ////////////
 
@@ -40,7 +38,6 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
 
   val initialGraph = graph.mapVertices((id, _) => if (id == sourceId) (0, Int.MaxValue - 1, id)
   else (Int.MaxValue - 1, Int.MaxValue - 1, id))
-
 
   val sssp = initialGraph.pregel((Int.MaxValue - 1, Int.MaxValue - 1, test))(
 
@@ -84,7 +81,7 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
   val path = Set[(VertexId, VertexId)]()
 
 
-  // CHECK IF THERE IS A PATH OR NOT, if no path => return empty set
+  // Check if there is a path or not, if no path => return empty set
   if (minCap != (Int.MaxValue - 1) ) {
     val links = new HashMap[VertexId, VertexId]
     for (i <- 0 to vNum - 1) {
@@ -93,7 +90,6 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
 
     // Build the set of edges in the shortest path
     var id = targetId
-    val loop = new Breaks // Needed to do break
     for (i <- 0 to vNum - 1; if id != sourceId) {
       path += ((links(id), id))
       id = links(id)
@@ -153,5 +149,9 @@ for (i <- 0 to iterMax; if path != empty) {
   minCap = shortest._2
 }
 
-println("Max Flow: ")
+println("Max Flows: ")
 flows.collect
+
+val emanating = flows.filter(e => e._1._1 == sourceId).map(e => (e._1._1,e._2)).reduceByKey(_ + _).collect
+println("Maximum flow emanating from source: ")
+println(emanating(0)._2)
