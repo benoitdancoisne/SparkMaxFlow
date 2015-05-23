@@ -14,7 +14,9 @@ val vertices = sc.textFile("data/toy-vertices.txt").
 // Import Edges
 val edges = sc.textFile("data/toy-edges.txt").
                 map(line => line.split(" ")).
-                map(e => Edge(e(0).toLong, e(1).toLong, e(2).toInt))
+				map(e => ((e(0).toLong, e(1).toLong), e(2).toInt)).
+				reduceByKey(_ + _).
+                map(e => Edge(e._1._1, e._1._2, e._2))
                 //map(e => Edge(e(0).toLong, e(1).toLong, 0))
 
 // Build RDD of flows (Needs to be var as it is going to be updated)
@@ -28,11 +30,11 @@ var residual: Graph[None.type,Int] = Graph(vertices, edges)
 //////// SHORTEST PATH FUNCTION /////////////////
 
 def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.type,Int] ) : (Set[(VertexId, VertexId)], Int) = {
-  val test: VertexId = 5 // default vertex id, probably need to change
+  val test: VertexId = sourceId // default vertex id, probably need to change
 
   // Initialize the graph such that all vertices except the root have distance infinity.
   // Note that now vertices will be of type [VertexId, (distance,mincap,id)]
-  // Note that the equivalent of Double.PositiveInfinity  is Int.MaxValue. But we check
+  // Note that the equivalent of Double.PositiveInfinity is Int.MaxValue. But we check
   // srcAttr._1 + 1, so we need to make sure there is no overflow, so set it to Int.MaxValue - 1
   // Otherwise Double.PositiveInfinity.toInt?
 
@@ -106,8 +108,14 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
 val iterMax = 10;
 
 // Set s and t nodes
+
 val sourceId: VertexId = 1 // The source
 val targetId: VertexId = 4 // The target
+
+/*
+val sourceId: VertexId = 42 // The source
+val targetId: VertexId = 73 // The target
+*/
 
 // Need to define theses outside loop to avoid use of break
 var shortest = shortestPath(sourceId, targetId, residual)
