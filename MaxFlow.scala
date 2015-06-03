@@ -16,7 +16,7 @@ Note that the maxFlow function is defined below the shortestPath function
  */
 
 def shortestPath(sourceId: VertexId, targetId: VertexId, graph: Graph[Long, Int]): (Set[(VertexId, VertexId)], Int) = {
-  val test: VertexId = sourceId // default vertex id, probably need to change
+  val test: VertexId = sourceId // default vertex id
 
   // Initialize the graph such that all vertices except the root have distance infinity.
   // Vertices will have attributes (distance,capacity,id)
