@@ -1,2 +1,2 @@
 # SparkMaxFlow
-Spark implementation of Ford-Fulkerson algorithm
+Spark implementation of max-flow graph algorithm
