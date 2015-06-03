@@ -10,26 +10,26 @@ def shortestPath(sourceId: VertexId, targetId: VertexId, graph: Graph[Long, Int]
 
   // Initialize the graph such that all vertices except the root have distance infinity.
   // Note that now vertices will be of type [VertexId, (distance,mincap,id)]
-  // Note that the equivalent of Double.PositiveInfinity is Int.MaxValue. But we check
-  // srcAttr._1 + 1, so we need to make sure there is no overflow, so set it to Int.MaxValue - 1
-  // Otherwise Double.PositiveInfinity.toInt?
+  // There does not seem to be an equivalent of Double.PositiveInfinity for Int objects
+  // Instead, we used Int.MaxValue. But since we check srcAttr._1 + 1,
+  // so we need to make sure there is no overflow, so set it to Int.MaxValue - 1
 
+  // initializing the vertex attributes
   val initialGraph = graph.mapVertices((id, _) => if (id == sourceId) (0, Int.MaxValue - 1, id)
   else (Int.MaxValue - 1, Int.MaxValue - 1, id))
 
   val sssp = initialGraph.pregel((Int.MaxValue - 1, Int.MaxValue - 1, test))(
 
-    // Vprog
+    // Vertex program
     (id, dist, newDist) => {
       if (dist._1 < newDist._1) dist
       else newDist
     },
 
-    // sendMsg
+    // send message
     triplet => {
-      // So if distance of source + weight of edge connecting to destination is
-      // less than attribute of destination => update
-      // if capacity along edges == 0; do not propagate message
+      // So if distance of source + 1 is less than attribute of destination => update
+      // But if capacity along edges <= 0; do not propagate message
       if (triplet.srcAttr._1 + 1 < triplet.dstAttr._1 && triplet.attr > 0) {
         Iterator((triplet.dstId, (triplet.srcAttr._1 + 1, math.min(triplet.srcAttr._2, triplet.attr), triplet.srcId)))
       }
@@ -38,28 +38,21 @@ def shortestPath(sourceId: VertexId, targetId: VertexId, graph: Graph[Long, Int]
       }
     },
 
-    // mergeMsg
+    // merge multiple messages
     (a, b) => {
-      if (a._1 < b._1) a
-      else if ((a._1 == b._1) && (a._2 > b._2)) a
+      if (a._1 < b._1) a // if distance from a is less than distance from b 
+      else if ((a._1 == b._1) && (a._2 > b._2)) a // if they're equal but a has a higher minimum capacity seen so far
       else b
     }
   )
 
-  /* TODO :
-
-    stop pregel sp when target node is hit --> pregel API does not seem to offer the possibility
-    maybe add an extra case in the sendMsg and send an empty iterator if target node is hit?
-*/
-
-  // What happens here if nodes are unvisited? We do not want those in our set. Add if != INF statement?
   val vNum = sssp.vertices.count.toInt // Number of elements < n
   val v = sssp.vertices.take(vNum) // Convert RDD to array
   val minCap = sssp.vertices.filter(v => v._1 == targetId).first._2._2
   val path = Set[(VertexId, VertexId)]()
 
 
-  // Check if there is a path or not, if no path => return empty set
+  // Check if there is a path or not; if no path => return empty set
   if (minCap != (Int.MaxValue - 1)) {
     val links = new HashMap[VertexId, VertexId]
     for (i <- 0 to vNum - 1) {
@@ -85,9 +78,7 @@ def maxFlow ( sourceId: VertexId, targetId: VertexId, graph: Graph[Long,Int] ) :
   var flows: RDD[((VertexId, VertexId), Int)] = edges.map(e => ((e.srcId, e.dstId), 0))
   var residual: Graph[Long, Int] = graph // Initially zero flow => residual = graph
 
-  // TODO :
-  // How many iterations?
-  val iterMax = 10;
+  val iterMax = 1000;
   var shortest = shortestPath(sourceId, targetId, residual)
   var path = shortest._1
   var minCap = shortest._2
