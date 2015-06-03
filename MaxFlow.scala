@@ -4,32 +4,8 @@ import org.apache.spark.rdd.RDD
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Set
 
-/////////// CREATE GRAPH ////////////
 
-// Import vertices
-val vertices = sc.textFile("data/toy-vertices.txt").
-                flatMap(line => line.split(" ")).
-                map(l => (l.toLong, None)) // Vertex needs a property
-
-// Import Edges
-val edges = sc.textFile("data/toy-edges.txt").
-                map(line => line.split(" ")).
-				map(e => ((e(0).toLong, e(1).toLong), e(2).toInt)).
-				reduceByKey(_ + _).
-                map(e => Edge(e._1._1, e._1._2, e._2))
-                //map(e => Edge(e(0).toLong, e(1).toLong, 0))
-
-// Build RDD of flows (Needs to be var as it is going to be updated)
-var flows: RDD[((VertexId,VertexId),Int)] = edges.map(e => ( (e.srcId,e.dstId), 0) )
-
-// Create Graph Residual graph (needs to be var)
-var residual: Graph[None.type,Int] = Graph(vertices, edges)
-
-
-
-//////// SHORTEST PATH FUNCTION /////////////////
-
-def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.type,Int] ) : (Set[(VertexId, VertexId)], Int) = {
+def shortestPath(sourceId: VertexId, targetId: VertexId, graph: Graph[Long, Int]): (Set[(VertexId, VertexId)], Int) = {
   val test: VertexId = sourceId // default vertex id, probably need to change
 
   // Initialize the graph such that all vertices except the root have distance infinity.
@@ -72,9 +48,9 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
 
   /* TODO :
 
-      stop pregel sp when target node is hit --> pregel API does not seem to offer the possibility
-      maybe add an extra case in the sendMsg and send an empty iterator if target node is hit?
-  */
+    stop pregel sp when target node is hit --> pregel API does not seem to offer the possibility
+    maybe add an extra case in the sendMsg and send an empty iterator if target node is hit?
+*/
 
   // What happens here if nodes are unvisited? We do not want those in our set. Add if != INF statement?
   val vNum = sssp.vertices.count.toInt // Number of elements < n
@@ -84,7 +60,7 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
 
 
   // Check if there is a path or not, if no path => return empty set
-  if (minCap != (Int.MaxValue - 1) ) {
+  if (minCap != (Int.MaxValue - 1)) {
     val links = new HashMap[VertexId, VertexId]
     for (i <- 0 to vNum - 1) {
       links += v(i)._1 -> v(i)._2._3
@@ -101,65 +77,55 @@ def shortestPath ( sourceId: VertexId, targetId: VertexId, graph: Graph[None.typ
   return (path, minCap)
 }
 
-/////////////// COMPUTE MAX FLOW //////////////////////
 
-// TODO :
-// How many iterations?
-val iterMax = 10;
+def maxFlow ( sourceId: VertexId, targetId: VertexId, graph: Graph[Long,Int] ) : RDD[((VertexId,VertexId),Int)] = {
 
-// Set s and t nodes
+  val edges = graph.edges
+  val vertices = graph.vertices
+  var flows: RDD[((VertexId, VertexId), Int)] = edges.map(e => ((e.srcId, e.dstId), 0))
+  var residual: Graph[Long, Int] = graph // Initially zero flow => residual = graph
 
-val sourceId: VertexId = 1 // The source
-val targetId: VertexId = 4 // The target
+  // TODO :
+  // How many iterations?
+  val iterMax = 10;
+  var shortest = shortestPath(sourceId, targetId, residual)
+  var path = shortest._1
+  var minCap = shortest._2
+  val empty = Set[(VertexId, VertexId)]() // Empty set
 
-/*
-val sourceId: VertexId = 42 // The source
-val targetId: VertexId = 73 // The target
-*/
+  for (i <- 0 to iterMax; if path != empty) {
+    val bcPath = sc.broadcast(path)
 
-// Need to define theses outside loop to avoid use of break
-var shortest = shortestPath(sourceId, targetId, residual)
-var path = shortest._1
-var minCap = shortest._2
-val empty = Set[(VertexId, VertexId)]() // Empty set
+    // Update the flows
+    val updateFlow = minCap
+    val newFlows = flows.map(e => {
+      if (bcPath.value contains e._1) {
+        (e._1, e._2 + updateFlow)
+      }
+      else {
+        e
+      }
+    })
 
-for (i <- 0 to iterMax; if path != empty) {
-  val bcPath = sc.broadcast(path)
+    flows = newFlows
 
-  // Update the flows
-  val updateFlow = minCap // This is of course stupid, but using minCap to update newFlows makes values go crazy
-  val newFlows = flows.map(e => {
-    if (bcPath.value contains e._1) {
-      (e._1, e._2 + updateFlow)
+    // Update the residual graph
+    val newEdges = residual.edges.map(e => ((e.srcId, e.dstId), e.attr)).
+      flatMap(e => {
+      if (bcPath.value contains e._1) {
+        Seq((e._1, e._2 - minCap), ((e._1._2, e._1._1), minCap))
+      }
+      else Seq(e)
     }
-    else {
-      e
-    }
-  })
+      ).reduceByKey(_ + _)
 
-  flows = newFlows
+    residual = Graph(vertices, newEdges.map(e => Edge(e._1._1, e._1._2, e._2)))
 
-  // Update the residual graph
-  val newEdges = residual.edges.map(e => ((e.srcId, e.dstId), e.attr)).
-    flatMap(e => {
-    if (bcPath.value contains e._1) {
-      Seq((e._1, e._2 - minCap), ((e._1._2, e._1._1), minCap))
-    }
-    else Seq(e)
+    // Compute for next iteration of the for loop
+    shortest = shortestPath(sourceId, targetId, residual)
+    path = shortest._1
+    minCap = shortest._2
   }
-    ).reduceByKey(_ + _)
 
-  residual = Graph(vertices, newEdges.map(e => Edge(e._1._1, e._1._2, e._2)))
-
-  // Compute these for next iteration of the for loop
-  shortest = shortestPath(sourceId, targetId, residual)
-  path = shortest._1
-  minCap = shortest._2
+  return flows
 }
-
-println("Max Flows: ")
-flows.collect
-
-val emanating = flows.filter(e => e._1._1 == sourceId).map(e => (e._1._1,e._2)).reduceByKey(_ + _).collect
-println("Maximum flow emanating from source: ")
-println(emanating(0)._2)
