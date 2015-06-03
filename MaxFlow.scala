@@ -78,7 +78,7 @@ def maxFlow ( sourceId: VertexId, targetId: VertexId, graph: Graph[Long,Int] ) :
   var flows: RDD[((VertexId, VertexId), Int)] = edges.map(e => ((e.srcId, e.dstId), 0))
   var residual: Graph[Long, Int] = graph // Initially zero flow => residual = graph
 
-  val iterMax = 1000;
+  val iterMax = 1001;
   var shortest = shortestPath(sourceId, targetId, residual)
   var path = shortest._1
   var minCap = shortest._2
