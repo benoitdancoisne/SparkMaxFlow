@@ -9,10 +9,8 @@ def shortestPath(sourceId: VertexId, targetId: VertexId, graph: Graph[Long, Int]
   val test: VertexId = sourceId // default vertex id, probably need to change
 
   // Initialize the graph such that all vertices except the root have distance infinity.
-  // Note that now vertices will be of type [VertexId, (distance,mincap,id)]
-  // There does not seem to be an equivalent of Double.PositiveInfinity for Int objects
-  // Instead, we used Int.MaxValue. But since we check srcAttr._1 + 1,
-  // so we need to make sure there is no overflow, so set it to Int.MaxValue - 1
+  // Note that now vertices will have attributes (distance,capacity,id)
+  // Note we use Int.MaxValue - 1 to symbolise infinity
 
   // initializing the vertex attributes
   val initialGraph = graph.mapVertices((id, _) => if (id == sourceId) (0, Int.MaxValue - 1, id)
@@ -78,13 +76,15 @@ def maxFlow ( sourceId: VertexId, targetId: VertexId, graph: Graph[Long,Int] ) :
   var flows: RDD[((VertexId, VertexId), Int)] = edges.map(e => ((e.srcId, e.dstId), 0))
   var residual: Graph[Long, Int] = graph // Initially zero flow => residual = graph
 
-  val iterMax = 1001;
   var shortest = shortestPath(sourceId, targetId, residual)
   var path = shortest._1
   var minCap = shortest._2
   val empty = Set[(VertexId, VertexId)]() // Empty set
 
-  for (i <- 0 to iterMax; if path != empty) {
+  // Note that algorithm only terminates when there are no more shortest paths
+  // This could potentially be a long time, so the code user should edit in a max number
+  // of iterations here if needed
+  while (path != empty) {
     val bcPath = sc.broadcast(path)
 
     // Update the flows
@@ -112,7 +112,7 @@ def maxFlow ( sourceId: VertexId, targetId: VertexId, graph: Graph[Long,Int] ) :
 
     residual = Graph(vertices, newEdges.map(e => Edge(e._1._1, e._1._2, e._2)))
 
-    // Compute for next iteration of the for loop
+    // Compute for next iteration
     shortest = shortestPath(sourceId, targetId, residual)
     path = shortest._1
     minCap = shortest._2
