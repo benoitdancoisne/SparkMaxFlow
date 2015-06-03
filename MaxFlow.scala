@@ -4,13 +4,23 @@ import org.apache.spark.rdd.RDD
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Set
 
+/*
+maxFlow function
+
+Arguments: sourceId (type: VertexId)
+           targetId (type: VertexId)
+           graph (type: Graph[Long,Int])
+Returns: the maximum flows as RDD[(VertexId,VertexId),Int]
+
+Note that the maxFlow function is defined below the shortestPath function
+ */
 
 def shortestPath(sourceId: VertexId, targetId: VertexId, graph: Graph[Long, Int]): (Set[(VertexId, VertexId)], Int) = {
   val test: VertexId = sourceId // default vertex id, probably need to change
 
   // Initialize the graph such that all vertices except the root have distance infinity.
-  // Note that now vertices will have attributes (distance,capacity,id)
-  // Note we use Int.MaxValue - 1 to symbolise infinity
+  // Vertices will have attributes (distance,capacity,id)
+  // Note that Int.MaxValue - 1 is used to symbolise infinity
 
   // initializing the vertex attributes
   val initialGraph = graph.mapVertices((id, _) => if (id == sourceId) (0, Int.MaxValue - 1, id)
@@ -26,8 +36,8 @@ def shortestPath(sourceId: VertexId, targetId: VertexId, graph: Graph[Long, Int]
 
     // send message
     triplet => {
-      // So if distance of source + 1 is less than attribute of destination => update
-      // But if capacity along edges <= 0; do not propagate message
+      // If distance of source + 1 is less than attribute of destination => update
+      // If capacity along edges <= 0; do not propagate message
       if (triplet.srcAttr._1 + 1 < triplet.dstAttr._1 && triplet.attr > 0) {
         Iterator((triplet.dstId, (triplet.srcAttr._1 + 1, math.min(triplet.srcAttr._2, triplet.attr), triplet.srcId)))
       }
