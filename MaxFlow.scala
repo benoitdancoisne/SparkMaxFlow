@@ -83,7 +83,9 @@ def maxFlow ( sourceId: VertexId, targetId: VertexId, graph: Graph[Long,Int] ) :
 
   val edges = graph.edges
   val vertices = graph.vertices
-  var flows: RDD[((VertexId, VertexId), Int)] = edges.map(e => ((e.srcId, e.dstId), 0))
+  var flows: RDD[((VertexId, VertexId), Int)] = edges
+      .flatMap(e => Seq(((e.srcId, e.dstId), 0),((e.dstId, e.srcId), 0)))
+      .reduceByKey(_ + _)
   var residual: Graph[Long, Int] = graph // Initially zero flow => residual = graph
 
   var shortest = shortestPath(sourceId, targetId, residual)
@@ -100,13 +102,17 @@ def maxFlow ( sourceId: VertexId, targetId: VertexId, graph: Graph[Long,Int] ) :
     // Update the flows
     val updateFlow = minCap
     val newFlows = flows.map(e => {
-      if (bcPath.value contains e._1) {
-        (e._1, e._2 + updateFlow)
-      }
-      else {
-        e
-      }
-    })
+        // If the broadcast path contains an edge from the flows then we increase the flow at that edge
+        if (bcPath.value contains e._1) {
+          (e._1, e._2 + updateFlow)
+        }
+        else if (bcPath.value.map(e=>e.swap) contains e._1) {
+          (e._1, e._2 - updateFlow)
+        }
+        else {
+          e
+        }
+      })
 
     flows = newFlows
 
